@@ -1,67 +1,143 @@
 /**
- * Project K2000 - V1
- * @title : Make leds wave-blink
+ * Project Light Pet - Self Defense Edition
+ * @title : Light-Pet with deadly counter-measures
  * @Author : Elysio / Maël KERVICHE
+ * @description : find out yourself
  **/
 
-// time between each led
-int delayTime = 750;
+// include libraries
 
-// the led id (start at 0)
-int currentLED = 0;
+// LCD (with initializattion)
+#include <LiquidCrystal.h>
+LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
-// trajectory's direction (+1/-1)
-int direction = 1;
+// ServoMotor
+#include <Servo.h>
+#include <SoftwareSerial.h>
 
-// led's id array
-byte led[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+// global variables
 
+// infraredSensor
+const int infraredSensor_ID = 13;
+int infraredSensor_Value = 0;
+
+// UltraSoundSensor
+const int ultraSoundSensorTrig_ID = 11;
+const int ultraSoundSensorEcho_ID = 12;
+int ultraSoundSensorTrig_Value = 0;
+int ultraSoundSensorEcho_Value = 0;
+
+// utilities for UltraSoundSensor
+int mesure = 0;
+int distance = 0;
+int lastDistance = 101;
+
+// ServoMotor
+Servo servo;
+
+// setup pins and utilities
 void setup()
 {
-    // setup code, run once
+  // initializing serial monitor
+  Serial.begin(9600);
 
-    // for each led
-    for (int i = 0; i < 9; i++)
-    {
-        // init OUTPUT
-        pinMode(led[i], OUTPUT);
-    }
+  // initializing ServoMotor
+  servo.attach(9);
+  servo.write(0);
 
-    Serial.begin(9600);
+  // setup the UltraSoundSensor
+  pinMode(ultraSoundSensorTrig_ID, OUTPUT);
+  pinMode(ultraSoundSensorEcho_ID, INPUT);
+
+  // setup the LCD mode to 1602
+  lcd.begin(16, 2);
+  lcd.print("Welcome, Slayer!");
+  delay(3000);
 }
 
+// while running, reap-eat
 void loop()
 {
-    // main code, run repeatedly
 
-    // time interval (read from 'potentiometre')
-    // with security 5ms delay if time equals 0
-    delay(analogRead(0));
-    delay(5);
+  infraredSensor_Value = digitalRead(infraredSensor_ID);
 
-    // turn off all leds
-    for (int i = 0; i < 10; i++)
+  // no enemies detected
+  if (infraredSensor_Value == LOW)
+  {
+
+    // checking if target is still (something in range)
+    // send a scan by ulstraSouund (10µs)
+    digitalWrite(ultraSoundSensorTrig_ID, 1);
+    delayMicroseconds(10);
+    digitalWrite(ultraSoundSensorTrig_ID, 0);
+
+    int currMesure = pulseIn(ultraSoundSensorEcho_ID, 1);
+    int currDistance = ((mesure)*0.017);
+
+    // target got still
+    if ((lastDistance == currDistance) && (currDistance <= 100))
     {
-        digitalWrite(led[i], LOW);
+      firing();
+    }
+    else
+    {
+      lcd.setCursor(0, 0);
+      lcd.print("NoTargetDetected");
+      lcd.setCursor(0, 1);
+      lcd.print("Ready to Slay");
     }
 
-    // blink current led once
-    digitalWrite(led[currentLED], HIGH);
-    delay(100);
-    digitalWrite(led[currentLED], LOW);
+    // enemies detected
+  }
+  else
+  {
+    firing();
+  }
+  delay(250);
+}
 
-    // move to next led
-    currentLED = currentLED + direction;
+void firing()
+{
 
-    // if moved to last id
-    if (currentLED <= 0)
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Target Detected");
+
+  // send a scan by ulstraSouund (10µs)
+  digitalWrite(ultraSoundSensorTrig_ID, 1);
+  delayMicroseconds(10);
+  digitalWrite(ultraSoundSensorTrig_ID, 0);
+
+  mesure = pulseIn(ultraSoundSensorEcho_ID, 1);
+  distance = ((mesure)*0.017);
+
+  // check distance to fire
+  // if target closer than 100cm, firing
+  if (distance <= 100)
+  {
+    lcd.setCursor(0, 1);
+    lcd.print("Firing (" + String(distance) + ")");
+    lastDistance = distance;
+
+    // moving ServoMotor (shoot)
+    for (int i = 0; i <= 180; i++)
     {
-        // change direction
-        direction = 1;
+      servo.write(i);
+      delay(15);
     }
-    else if (currentLED >= 9)
+    // moving ServoMotor (reset)
+    for (int i = 0; i >= 180; i--)
     {
-        // change direction
-        direction = -1;
+      servo.write(i);
+      delay(15);
     }
+
+    // if target is further than 100cm, waiting
+  }
+  else
+  {
+    lcd.setCursor(0, 1);
+    lcd.print(String(distance) + " cm");
+    lastDistance = distance;
+  }
 }
